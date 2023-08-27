@@ -44,11 +44,12 @@ libc_enum! {
         /// do it like `fsync`
         O_SYNC,
         /// on supported operating systems only, do it like `fdatasync`
-        #[cfg(any(target_os = "ios",
-                  target_os = "linux",
-                  target_os = "macos",
-                  target_os = "netbsd",
-                  target_os = "openbsd"))]
+        #[cfg(all(any(target_os = "ios",
+                      target_os = "linux",
+                      target_os = "macos",
+                      target_os = "netbsd",
+                      target_os = "openbsd"),
+                  not(target_arch = "e2k64")))]
         #[cfg_attr(docsrs, doc(cfg(all())))]
         O_DSYNC
     }
