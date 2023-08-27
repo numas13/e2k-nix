@@ -14,6 +14,7 @@
 #![deny(unstable_features)]
 #![deny(missing_copy_implementations)]
 #![deny(missing_debug_implementations)]
+#![allow(unused_unsafe)]
 
 // Re-exported external crates
 pub use libc;
