@@ -32,6 +32,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   ([#1964](https://github.com/nix-rust/nix/pull/1964))
 
 ## [0.26.1] - 2022-11-29
+## [0.27.1] - 2023-08-28
+
+### Fixed
+
+- Fixed generating the documentation on docs.rs.
+  ([#2111](https://github.com/nix-rust/nix/pull/2111))
+
 ## [0.27.0] - 2023-08-28
 ### Added
 - Added `AT_EACCESS` to `AtFlags` on all platforms but android
