@@ -9,7 +9,7 @@ env:
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
   TOOL: cargo
-  MSRV: 1.56.1
+  MSRV: 1.65.0
   ZFLAGS:
 
 # Tests that don't require executing the build binaries
@@ -18,9 +18,9 @@ build: &BUILD
     - . $HOME/.cargo/env || true
     - $TOOL -Vv
     - rustc -Vv
-    - $TOOL $BUILD $ZFLAGS --target $TARGET --all-targets
-    - $TOOL doc $ZFLAGS --no-deps --target $TARGET
-    - $TOOL clippy $ZFLAGS --target $TARGET --all-targets -- $CLIPPYFLAGS
+    - $TOOL $BUILD $ZFLAGS --target $TARGET --all-targets --all-features
+    - $TOOL doc $ZFLAGS --no-deps --target $TARGET --all-features
+    - $TOOL clippy $ZFLAGS --target $TARGET --all-targets --all-features -- $CLIPPYFLAGS
     - if [ -z "$NOHACK" ]; then mkdir -p $HOME/.cargo/bin; export PATH=$HOME/.cargo/bin:$PATH; fi
     - if [ -z "$NOHACK" ]; then curl -LsSf https://github.com/taiki-e/cargo-hack/releases/latest/download/cargo-hack-${HOST:-$TARGET}.tar.gz | tar xzf - -C ~/.cargo/bin; fi
     - if [ -z "$NOHACK" ]; then $TOOL hack $ZFLAGS check --target $TARGET --each-feature; fi
@@ -30,7 +30,7 @@ test: &TEST
   << : *BUILD
   test_script:
     - . $HOME/.cargo/env || true
-    - $TOOL test --target $TARGET
+    - $TOOL test --target $TARGET --all-features
 
 # Test FreeBSD in a full VM.  Test the i686 target too, in the
 # same VM.  The binary will be built in 32-bit mode, but will execute on a
@@ -40,12 +40,10 @@ task:
   env:
     TARGET: x86_64-unknown-freebsd
   matrix:
-    - name: FreeBSD 12 amd64 & i686
-      freebsd_instance:
-        image: freebsd-12-3-release-amd64
     - name: FreeBSD 14 amd64 & i686
       freebsd_instance:
         image_family: freebsd-14-0-snap
+        cpu: 1
       # Enable tests that would fail on FreeBSD 12
       RUSTFLAGS: --cfg fbsd14 -D warnings
       RUSTDOCFLAGS: --cfg fbsd14
@@ -56,13 +54,12 @@ task:
     - . $HOME/.cargo/env
     - rustup target add i686-unknown-freebsd
     - rustup component add clippy
-    - cp Cargo.lock.msrv Cargo.lock
   << : *TEST
   i386_test_script:
     - . $HOME/.cargo/env
-    - cargo build --target i686-unknown-freebsd
-    - cargo doc --no-deps --target i686-unknown-freebsd
-    - cargo test --target i686-unknown-freebsd
+    - cargo build --target i686-unknown-freebsd --all-features
+    - cargo doc --no-deps --target i686-unknown-freebsd --all-features
+    - cargo test --target i686-unknown-freebsd --all-features
   i386_feature_script:
     - . $HOME/.cargo/env
     - if [ -z "$NOHACK" ]; then cargo hack check --each-feature --target i686-unknown-freebsd; fi
@@ -80,13 +77,20 @@ task:
     - sh rustup.sh -y --profile=minimal --default-toolchain $MSRV
     - . $HOME/.cargo/env
     - rustup component add clippy
-    - cp Cargo.lock.msrv Cargo.lock
   << : *TEST
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 # Use cross for QEMU-based testing
 # cross needs to execute Docker, so we must use Cirrus's Docker Builder task.
 task:
+  depends_on:
+    - FreeBSD 14 amd64 & i686
+    - Linux x86_64
+    - macOS aarch64
+    - Rust Formatter
+    - OpenBSD x86_64
+    - Minver
+    - Rust Stable
   env:
     RUST_TEST_THREADS: 1            # QEMU works best with 1 thread
     HOME: /tmp/home
@@ -133,8 +137,7 @@ task:
     - curl --proto '=https' --tlsv1.2 -sSf -o rustup.sh https://sh.rustup.rs
     - sh rustup.sh -y --profile=minimal --default-toolchain $MSRV
     - . $HOME/.cargo/env
-    - cargo install cross --version 0.2.1 --locked # cross 0.2.2 bumped the MSRV to 1.58.1
-    - cp Cargo.lock.msrv Cargo.lock
+    - cargo install cross --version 0.2.5
   << : *TEST
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
@@ -143,17 +146,36 @@ task:
   matrix:
     - name: Linux aarch64
       arm_container:
-        image: rust:1.56
+        image: rust:1.65.0
+        cpu: 1
+      depends_on:
+        - FreeBSD 14 amd64 & i686
+        - Linux x86_64
+        - macOS aarch64
+        - Rust Formatter
+        - OpenBSD x86_64
+        - Minver
+        - Rust Stable
       env:
         TARGET: aarch64-unknown-linux-gnu
     - name: Linux x86_64
       container:
-        image: rust:1.56
+        image: rust:1.65.0
+        cpu: 1
       env:
         TARGET: x86_64-unknown-linux-gnu
     - name: Linux x86_64 musl
       container:
-        image: rust:1.56
+        image: rust:1.65.0
+        cpu: 1
+      depends_on:
+        - FreeBSD 14 amd64 & i686
+        - Linux x86_64
+        - macOS aarch64
+        - Rust Formatter
+        - OpenBSD x86_64
+        - Minver
+        - Rust Stable
       env:
         TARGET: x86_64-unknown-linux-musl
   setup_script:
@@ -167,6 +189,7 @@ task:
   name: Rust Stable
   container:
     image: rust:latest
+    cpu: 1
   env:
     TARGET: x86_64-unknown-linux-gnu
   setup_script:
@@ -177,7 +200,16 @@ task:
 # Tasks for cross-compiling, but no testing
 task:
   container:
-    image: rust:1.56
+    image: rust:1.65.0
+    cpu: 1
+  depends_on:
+    - FreeBSD 14 amd64 & i686
+    - Linux x86_64
+    - macOS aarch64
+    - Rust Formatter
+    - OpenBSD x86_64
+    - Minver
+    - Rust Stable
   env:
     BUILD: check
     HOST: x86_64-unknown-linux-gnu
@@ -215,16 +247,6 @@ task:
         # cargo hack tries to invoke the iphonesimulator SDK for iOS
         NOHACK: 1
         TARGET: aarch64-apple-ios
-    - name: iOS x86_64
-      env:
-        # cargo hack tries to invoke the iphonesimulator SDK for iOS
-        NOHACK: 1
-        TARGET: x86_64-apple-ios
-    # Cross testing on powerpc fails with "undefined reference to renameat2".
-    # Perhaps cross is using too-old a version?
-    - name: Linux powerpc
-      env:
-        TARGET: powerpc-unknown-linux-gnu
     # Cross claims to support Linux powerpc64, but it really doesn't.
     # https://github.com/rust-embedded/cross/issues/441
     - name: Linux powerpc64
@@ -236,16 +258,12 @@ task:
     - name: Linux x32
       env:
         TARGET: x86_64-unknown-linux-gnux32
-    - name: macOS x86_64
-      env:
-        TARGET: x86_64-apple-darwin
     - name: NetBSD x86_64
       env:
         TARGET: x86_64-unknown-netbsd
   setup_script:
     - rustup target add $TARGET
     - rustup component add clippy
-    - cp Cargo.lock.msrv Cargo.lock
   << : *BUILD
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
@@ -253,6 +271,15 @@ task:
   container:
     # Redox's MSRV policy is unclear.  Until they define it, use nightly.
     image: rustlang/rust:nightly
+    cpu: 1
+  depends_on:
+    - FreeBSD 14 amd64 & i686
+    - Linux x86_64
+    - macOS aarch64
+    - Rust Formatter
+    - OpenBSD x86_64
+    - Minver
+    - Rust Stable
   env:
     BUILD: check
   name: Redox x86_64
@@ -270,6 +297,7 @@ task:
 task:
   container:
     image: rustlang/rust:nightly
+    cpu: 1
   env:
     BUILD: check
     HOST: x86_64-unknown-linux-gnu
@@ -277,15 +305,39 @@ task:
     CLIPPYFLAGS: -D warnings
   matrix:
     - name: DragonFly BSD x86_64
+      depends_on:
+        - FreeBSD 14 amd64 & i686
+        - Linux x86_64
+        - macOS aarch64
+        - Rust Formatter
+        - OpenBSD x86_64
+        - Minver
+        - Rust Stable
       env:
         TARGET: x86_64-unknown-dragonfly
     - name: OpenBSD x86_64
       env:
         TARGET: x86_64-unknown-openbsd
     - name: Linux armv7 uclibceabihf
+      depends_on:
+        - FreeBSD 14 amd64 & i686
+        - Linux x86_64
+        - macOS aarch64
+        - Rust Formatter
+        - OpenBSD x86_64
+        - Minver
+        - Rust Stable
       env:
         TARGET: armv7-unknown-linux-uclibceabihf
     - name: Haiku x86_64
+      depends_on:
+        - FreeBSD 14 amd64 & i686
+        - Linux x86_64
+        - macOS aarch64
+        - Rust Formatter
+        - OpenBSD x86_64
+        - Minver
+        - Rust Stable
       env:
         TARGET: x86_64-unknown-haiku
   setup_script:
@@ -302,6 +354,7 @@ task:
     HOST: x86_64-unknown-linux-gnu
   container:
     image: rustlang/rust:nightly
+    cpu: 1
   setup_script:
     - cargo update -Zminimal-versions
   check_script:
@@ -313,5 +366,6 @@ task:
   name: Rust Formatter
   container:
     image: rust:latest
+    cpu: 1
   setup_script: rustup component add rustfmt
   test_script: cargo fmt --all -- --check **/*.rs
